@@ -680,17 +680,48 @@
           allowTaint: true
         });
 
-        const imageURI = canvas.toDataURL('image/jpeg', 1.0);
-        
         const cleanDeliveryNum = deliveryNum.replace(/[/\\?%*:|"<>]/g, '-').trim();
         const fileName = `${cleanDeliveryNum}.jpg`;
 
-        const link = document.createElement('a');
-        link.download = fileName;
-        link.href = imageURI;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        // Canvas in Blob umwandeln für bessere iOS/Safari-Kompatibilität
+        canvas.toBlob(async function(blob) {
+          if (!blob) {
+            alert('Fehler beim Erstellen der Bilddatei.');
+            return;
+          }
+
+          const file = new File([blob], fileName, { type: 'image/jpeg' });
+
+          // 1. iOS / Mobile Web Share API (Öffnet das native iOS-Teilen-Menü)
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            try {
+              await navigator.share({
+                files: [file],
+                title: 'ADR Check Protokoll',
+                text: `ADR Check Protokoll für ${deliveryNum}`
+              });
+              return;
+            } catch (shareErr) {
+              // Falls der User den Teilen-Dialog abbricht, nicht als Fehler behandeln
+              if (shareErr.name === 'AbortError') return;
+            }
+          }
+
+          // 2. Standard Download via ObjectURL (Funktioniert auf PCs und modernem Mobile Chrome/Safari)
+          const blobUrl = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.download = fileName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+
+          // Fallback für alte iOS Safari Versionen: Bild in neuem Tab öffnen
+          setTimeout(() => {
+            URL.revokeObjectURL(blobUrl);
+          }, 1000);
+
+        }, 'image/jpeg', 0.95);
 
       } catch (err) {
         alert("Fehler beim Erzeugen des Protokolls: " + err.message);
